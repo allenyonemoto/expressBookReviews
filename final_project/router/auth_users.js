@@ -7,37 +7,43 @@ let users = [{"username":"allenyonemoto","password":"r53#H1%t9f$S"}];
 
 const isValid = (username)=>{ //returns boolean
     //write code to check is the username is valid
-    const userMatches = users.filter((user) => user.username === username);
-    return userMatches.length > 0;
 }
 
 const authenticatedUser = (username,password)=>{ //returns boolean
     //write code to check if username and password match the one we have in records.
-    const matchingUsers = users.filter((user) => user.username === username && user.password === password);
-    return matchingUsers.length > 0;
+    let validusers = users.filter((user) => {
+        return (user.username === username && user.password === password)
+    });
+    if (validusers.length > 0) {
+        return true;
+    } else {
+        return false;
+    }
 }
 
 //only registered users can login
 regd_users.post("/login", (req,res) => {
     //Write your code here
-    console.log("login: ", req.body);
-    const username = req.body.username;
-    const password = req.body.password;
+    const username = req.query.username;
+    const password = req.query.password;
+
     if (!username || !password) {
-        return res.status(404).json({message: "Error logging in"});
+        return res.status(404).json({ message: "Error logging in" });
     }
 
-    if (authenticatedUser(username,password)) {
-        let accessToken = jwt.sign({
-            data: password
-        }, 'access', { expiresIn: 60 * 60 });
+    if (authenticatedUser(username, password)) {
+        let accessToken = jwt.sign(
+            { data: password },
+            'access',
+            { expiresIn: 60 * 60 }
+        );
 
         req.session.authorization = {
-            accessToken,username
+            accessToken, username
         }
         return res.status(200).send("User successfully logged in");
     } else {
-        return res.status(208).json({message: "Invalid Login. Check username and password"});
+        return res.status(208).json({ message: "Invalid Login. Check username and password" });
     }
 });
 
@@ -45,29 +51,50 @@ regd_users.post("/login", (req,res) => {
 regd_users.put("/auth/review/:isbn", (req, res) => {
     //Write your code here
     const isbn = req.params.isbn;
-    const review = req.body.review;
-    const username = req.session.authorization.username;
-    console.log("add review: ", req.params, req.body, req.session);
-    if (books[isbn]) {
-        let book = books[isbn];
-        book.reviews[username] = review;
-        return res.status(200).send("Review successfully posted");
-    }
-    else {
-        return res.status(404).json({message: `ISBN ${isbn} not found`});
+    const review = req.query.review;
+    const username = req.query.username;
+    const book = Object.values(books).find(book => book.isbn === isbn);
+    const bookReviews = book.reviews;
+
+    if (!book) {
+        res.send(`Book with isbn ${isbn} not found.`);
+    } else if (!username || !review) {
+        res.send(`Review or user name is missing`);
+    } else {
+        const userReview = bookReviews.find(review => review.username === username);
+        if (userReview) {
+            // If user has already reviewed, update the review
+            userReview.review = review;
+            res.send(`Review updated for user ${username} on book with isbn ${isbn}`);
+        } else {
+            // If user hasn't reviewed yet, add a new review
+            bookReviews.push({ username, review });
+            res.send(`Review added for user ${username} on book with isbn ${isbn}`);
+        }
     }
 });
 
 regd_users.delete("/auth/review/:isbn", (req, res) => {
     const isbn = req.params.isbn;
-    const username = req.session.authorization.username;
-    if (books[isbn]) {
-        let book = books[isbn];
-        delete book.reviews[username];
-        return res.status(200).send("Review successfully deleted");
-    }
-    else {
-        return res.status(404).json({message: `ISBN ${isbn} not found`});
+    const username = req.session.authorization.username; // Retrieve username from session
+    const book = Object.values(books).find(book => book.isbn === isbn);
+    const bookReviews = book.reviews;
+
+    if (!book) {
+        res.send(`Book with isbn ${isbn} not found.`);
+    } else if (!username) {
+        res.send(`User is not authenticated. Please log in.`);
+    } else {
+        const userReviewIndex = bookReviews.findIndex(review => review.username === username);
+
+        if (userReviewIndex !== -1) {
+            // If user has a review, delete the review
+            bookReviews.splice(userReviewIndex, 1);
+            res.send(`Review deleted for user ${username} on book with isbn ${isbn}`);
+        } else {
+            // If user doesn't have a review on the book
+            res.send(`The user ${username} has no review on book with isbn ${isbn}`);
+        }
     }
 });
 
